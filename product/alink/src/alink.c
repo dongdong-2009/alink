@@ -13,7 +13,7 @@
 #include "alink.h"
 #include "alink_export_zigbee.h"
 #include "alink_export_gateway.h"
-#include "platform.h"
+#include "platform_.h"
 #include "product.h"
 #include "zigbee.h"
 
@@ -146,7 +146,7 @@ int FactoryReset_service(char *json_in, char *json_out_buf, unsigned int buf_sz)
 int AddDeviceWiteList_service(char *json_in, char *json_out_buf, unsigned int buf_sz) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	int ret = zigbee_add_device_wite_list(char *s_dev_list);
+	int ret = zigbee_add_device_wite_list(json_in);
 
 	json_out_buf[0] = 0;
 
@@ -156,7 +156,7 @@ int DeleteDeviceWiteList_service(char *json_in, char *json_out_buf, unsigned int
 	log_info("[%d] %s", __LINE__, json_in);
 
 
-	int ret = zigbee_delete_device_wite_list(char *s_dev_list);
+	int ret = zigbee_delete_device_wite_list(json_in);
 
 	json_out_buf[0] = 0;
 
@@ -201,7 +201,7 @@ int NetworkInformation_attr_set(char *json_in) {
 int SceneMode_attr_get(char *buf, unsigned int buf_sz) {
 	log_info("[%d] ", __LINE__);
 	
-	int ret = zigbee_scene_mode_get(buf, buf_ze);
+	int ret = zigbee_scene_mode_get(buf, buf_sz);
 
 	return ret;
 }
@@ -216,14 +216,14 @@ int SceneMode_attr_set(char *json_in) {
 int SoundAlarmEnable_attr_get(char *buf, unsigned int buf_sz) {
 	log_info("[%d] ", __LINE__);
 
-	int ret = zigbee_scene_alarm_enable_get(buf, buf_sz);
+	int ret = zigbee_sound_alarm_enable_get(buf, buf_sz);
 
 	return ret;
 }
 int SoundAlarmEnable_attr_set(char *json_in) {
 	log_info("[%d] ", __LINE__);
 	
-	int ret = zigbee_scene_alarm_enable_set(json_in);
+	int ret = zigbee_sound_alarm_enable_set(json_in);
 	
 	return ret;
 }

@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "common.h"
 #include "log.h"
+#include "jansson.h"
+#include "json_parser.h"
 
 #include "zha.h"
 #include "zigbee.h"
@@ -35,15 +38,15 @@ static stZigbeeCache_t zc = {
 	.white_list = NULL,
 };
 
-static zigbee_fmt_short2str(char *buf, char *fmt, short v) {
+static char *zigbee_fmt_short2str(char *buf, char *fmt, short v) {
 	sprintf(buf, fmt, v);
 	return buf;
 }
-static zigbee_fmt_int2str(char *buf, char *fmt, int v) {
+static char *zigbee_fmt_int2str(char *buf, char *fmt, int v) {
 	sprintf(buf, fmt, v);
 	return buf;
 }
-static zigbee_fmt_ba2str(char *buf, char *fmt, char *data, int size) {
+static char *zigbee_fmt_ba2str(char *buf, char *fmt, char *data, int size) {
 	int i = 0;
 	int len = 0;
 	for (i = 0; i < size; i++) {
@@ -52,15 +55,15 @@ static zigbee_fmt_ba2str(char *buf, char *fmt, char *data, int size) {
 	return buf;
 }
 
-static short zigbee_fmt_str2short(char *buf, char *fmt, short *v) {
+static short zigbee_fmt_str2short(const char *buf, char *fmt, short *v) {
 	sscanf(buf, fmt, v);
 	return *v;
 }
-static int zigbee_fmt_str2int(char *buf, char *fmt, int *i) {
+static int zigbee_fmt_str2int(const char *buf, char *fmt, int *i) {
 	sscanf(buf, fmt, i);
 	return *i;
 }
-static int zigbee_fmt_str2ba(char *buf, char *fmt, char *data, int size) {
+static int zigbee_fmt_str2ba(const char *buf, char *fmt, char *data, int size) {
 	int i = 0;
 	for (i = 0; i < size; i++) {
 		sscanf(buf + i * 2, fmt, &data[i]);
@@ -69,7 +72,7 @@ static int zigbee_fmt_str2ba(char *buf, char *fmt, char *data, int size) {
 }
 
 /* attr */
-int zigbee_network_information_get(char *buf, unsigned int buf_sz) {
+int zigbee_network_information_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
 
 	char buf[32];
@@ -77,7 +80,7 @@ int zigbee_network_information_get(char *buf, unsigned int buf_sz) {
 	json_t *jout 	= json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
 
-	json_t *val = josn_object();
+	json_t *val = json_object();
 	json_object_set_new(val, "PanId", 		json_string(zigbee_fmt_short2str(buf, "%d", zc.panid)) );
 	json_object_set_new(val, "ExtPanId",	json_string(zigbee_fmt_ba2str(buf, "%02x", zc.extaddr, 8)) );
 	json_object_set_new(val, "Channel",		json_string(zigbee_fmt_int2str(buf, "%d", zc.channel)) );
@@ -87,7 +90,7 @@ int zigbee_network_information_get(char *buf, unsigned int buf_sz) {
 
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 	
 	json_decref(jout);
 	return 0;
@@ -95,8 +98,8 @@ int zigbee_network_information_get(char *buf, unsigned int buf_sz) {
 int zigbee_network_information_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -104,10 +107,10 @@ int zigbee_network_information_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sPanId 			= json_get_string(jval, "PanId");
-	char *sExtPanId		= json_get_string(jval, "ExtPanId");
-	char *sChannel		= json_get_string(jval, "Channel");
-	char *sNetworkKey = json_get_string(jval, "NetworkKey");
+	const char *sPanId 			= json_get_string(jval, "PanId");
+	const char *sExtPanId		= json_get_string(jval, "ExtPanId");
+	const char *sChannel		= json_get_string(jval, "Channel");
+	const char *sNetworkKey = json_get_string(jval, "NetworkKey");
 
 	zigbee_fmt_str2short(sPanId, "%04x", &zc.panid);
 	zigbee_fmt_str2ba(sExtPanId, "%02x", zc.extaddr, 8);
@@ -121,8 +124,9 @@ int zigbee_network_information_set(char *json_in) {
 }
 
 
-int zigbee_scene_mode_get(char *buf, unsigned int buf_ze) {
+int zigbee_scene_mode_get(char *buf_out, unsigned int buf_ze) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -133,7 +137,7 @@ int zigbee_scene_mode_get(char *buf, unsigned int buf_ze) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 	json_decref(jout);
 
@@ -142,8 +146,8 @@ int zigbee_scene_mode_get(char *buf, unsigned int buf_ze) {
 int zigbee_scene_mode_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -151,7 +155,7 @@ int zigbee_scene_mode_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sSceneMode = json_get_string(jval, "SceneMode");
+	const char *sSceneMode = json_get_string(jval, "SceneMode");
 
 	zigbee_fmt_str2int(sSceneMode, "%d", &zc.scene_mode);
 
@@ -160,8 +164,9 @@ int zigbee_scene_mode_set(char *json_in) {
 	return 0;
 }
 
-int zigbee_sound_alarm_enable_get(char *buf, unsigned int buf_sz) {
+int zigbee_sound_alarm_enable_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -172,7 +177,7 @@ int zigbee_sound_alarm_enable_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 	json_decref(jout);
 	return 0;
@@ -180,8 +185,8 @@ int zigbee_sound_alarm_enable_get(char *buf, unsigned int buf_sz) {
 int zigbee_sound_alarm_enable_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -189,7 +194,7 @@ int zigbee_sound_alarm_enable_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sSoundAlarmEnable = json_get_string(jval, "SoundAlarmEnable");
+	const char *sSoundAlarmEnable = json_get_string(jval, "SoundAlarmEnable");
 
 	zigbee_fmt_str2int(sSoundAlarmEnable, "%d", &zc.sound_alarm_enable);
 
@@ -198,8 +203,9 @@ int zigbee_sound_alarm_enable_set(char *json_in) {
 }
 
 
-int zigbee_sound_alarm_get(char *buf, unsigned int buf_sz) {
+int zigbee_sound_alarm_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -210,7 +216,7 @@ int zigbee_sound_alarm_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 
 	json_decref(jout);
@@ -220,8 +226,8 @@ int zigbee_sound_alarm_get(char *buf, unsigned int buf_sz) {
 int zigbee_sound_alarm_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -229,7 +235,7 @@ int zigbee_sound_alarm_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sSoundAlarm = json_get_string(jval, "SoundAlarm");
+	const char *sSoundAlarm = json_get_string(jval, "SoundAlarm");
 
 	zigbee_fmt_str2int(sSoundAlarm, "%d", &zc.sound_alarm);
 
@@ -240,8 +246,9 @@ int zigbee_sound_alarm_set(char *json_in) {
 
 
 
-int zigbee_light_alarm_enable_get(char *buf, unsigned int buf_sz) {
+int zigbee_light_alarm_enable_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -252,7 +259,7 @@ int zigbee_light_alarm_enable_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 	json_decref(jout);
 	return 0;
@@ -260,8 +267,8 @@ int zigbee_light_alarm_enable_get(char *buf, unsigned int buf_sz) {
 int zigbee_light_alarm_enable_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -269,7 +276,7 @@ int zigbee_light_alarm_enable_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sLightAlarmEnable = json_get_string(jval, "LightAlarmEnable");
+	const char *sLightAlarmEnable = json_get_string(jval, "LightAlarmEnable");
 
 	zigbee_fmt_str2int(sLightAlarmEnable, "%d", &zc.light_alarm_enable);
 
@@ -279,8 +286,9 @@ int zigbee_light_alarm_enable_set(char *json_in) {
 
 
 
-int zigbee_light_alarm_get(char *buf, unsigned int buf_sz) {
+int zigbee_light_alarm_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -291,7 +299,7 @@ int zigbee_light_alarm_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 
 	json_decref(jout);
@@ -300,8 +308,8 @@ int zigbee_light_alarm_get(char *buf, unsigned int buf_sz) {
 int zigbee_light_alarm_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
@@ -309,7 +317,7 @@ int zigbee_light_alarm_set(char *json_in) {
 
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sLightAlarm = json_get_string(jin, "LightAlarm");
+	const char *sLightAlarm = json_get_string(jval, "LightAlarm");
 
 	zigbee_fmt_str2int(sLightAlarm, "%d", &zc.light_alarm);
 
@@ -319,8 +327,9 @@ int zigbee_light_alarm_set(char *json_in) {
 }
 
 
-int zigbee_device_white_list_enable_get(char *buf, unsigned int buf_sz) {
+int zigbee_device_white_list_enable_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -331,7 +340,7 @@ int zigbee_device_white_list_enable_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 	json_decref(jout);
 
@@ -340,15 +349,15 @@ int zigbee_device_white_list_enable_get(char *buf, unsigned int buf_sz) {
 int zigbee_device_white_list_enable_set(char *json_in) {
 	log_info("[%d] %s", __LINE__, json_in);
 
-	json_errot_t error;
-	json_t *jin = json_load(json_in, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(json_in, 0, &error);
 	if (jin == NULL) {
 		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
 		return -1;
 	}
 	json_t *jval = json_object_get(jin, "value");
 
-	char *sWhiteListEnable = json_get_string(jin, "WhiteListEnable");
+	const char *sWhiteListEnable = json_get_string(jval, "WhiteListEnable");
 
 	zigbee_fmt_str2int(sWhiteListEnable, "%d", &zc.white_list_enable);
 
@@ -357,8 +366,10 @@ int zigbee_device_white_list_enable_set(char *json_in) {
 }
 
 
-int zigbee_device_white_list_get(char *buf, unsigned int buf_sz) {
+int zigbee_device_white_list_get(char *buf_out, unsigned int buf_sz) {
 	log_info("[%d]", __LINE__);
+
+	char buf[32];
 
 	json_t *jout = json_object();
 	json_object_set_new(jout, "when", 			json_string(zigbee_fmt_int2str(buf, "%d", time(NULL))) );
@@ -366,7 +377,7 @@ int zigbee_device_white_list_get(char *buf, unsigned int buf_sz) {
 	
 	char *sout = json_dumps(jout, 0);
 
-	strcpy(buf, sout);
+	strcpy(buf_out, sout);
 
 	json_decref(jout);
 	return 0;
@@ -382,25 +393,27 @@ int zigbee_device_white_list_set(char *json_in) {
 int zigbee_add_device_wite_list(char *s_dev_list) {
 	log_info("[%d] %s", __LINE__, s_dev_list);
 
-	json_errot_t error;
-	json_t *jin = json_load(s_dev_list, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(s_dev_list, 0, &error);
 	if (jin == NULL) {
-		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
+		log_warn("[%d] error json format: [%s]", __LINE__, s_dev_list);
 		return -1;
 	}
 
 	json_t *jsnSet = json_object_get(jin, "snSet");
 
 	if (!json_is_array(jsnSet)) {
-		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
+		log_warn("[%d] error json format: [%s]", __LINE__, s_dev_list);
 		return -1;
 	}
 
+	#if 0
 	size_t i;
 	json_t *jval;
-	json_array_for_each(jsnSet, i, jval) {
+	json_array_foreach(jsnSet, i, jval) {
 		//
 	}
+	#endif
 
 	json_decref(jin);
 	return 0;
@@ -408,25 +421,27 @@ int zigbee_add_device_wite_list(char *s_dev_list) {
 int zigbee_delete_device_wite_list(char *s_dev_list) {
 	log_info("[%d] %s", __LINE__, s_dev_list);
 
-	json_errot_t error;
-	json_t *jin = json_load(s_dev_list, 0, &error);
+	json_error_t error;
+	json_t *jin = json_loads(s_dev_list, 0, &error);
 	if (jin == NULL) {
-		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
+		log_warn("[%d] error json format: [%s]", __LINE__, s_dev_list);
 		return -1;
 	}
 
 	json_t *jsnSet = json_object_get(jin, "snSet");
 
 	if (!json_is_array(jsnSet)) {
-		log_warn("[%d] error json format: [%s]", __LINE__, json_in);
+		log_warn("[%d] error json format: [%s]", __LINE__, s_dev_list);
 		return -1;
 	}
 
+#if 0
 	size_t i;
 	json_t *jval;
-	json_array_for_each(jsnSet, i, jval) {
+	json_array_foreach(jsnSet, i, jval) {
 		//
 	}
+	#endif
 
 	json_decref(jin);
 	return 0;
